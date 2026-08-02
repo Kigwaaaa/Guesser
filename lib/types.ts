@@ -1,0 +1,1 @@
+// Shared game domain types placeholder.

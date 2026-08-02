@@ -1,0 +1,16 @@
+/* The navy room keeps attention on the violet identity spotlight. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--background: #0f1224;
+	--foreground: #f5f3ff;
+	--accent: #7c3aed;
+}
+
+body {
+	color: var(--foreground);
+	background: var(--background);
+	font-family: var(--font-geist-sans), sans-serif;
+}
