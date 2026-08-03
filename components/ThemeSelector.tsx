@@ -3,6 +3,12 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+type ThemeItemRow = {
+	theme: string | null;
+	name: string;
+	image_url: string | null;
+};
+
 type Props = {
 	value?: string;
 	onChange?: (theme: string) => void;
@@ -30,7 +36,7 @@ export default function ThemeSelector({ value, onChange }: Props) {
 					return;
 				}
 				const g: Record<string, { name: string; image_url: string | null }[]> = {};
-				(data || []).forEach((r: any) => {
+				((data ?? []) as ThemeItemRow[]).forEach((r) => {
 					const t = r.theme || "default";
 					g[t] = g[t] || [];
 					g[t].push({ name: r.name, image_url: r.image_url ?? null });
@@ -45,7 +51,7 @@ export default function ThemeSelector({ value, onChange }: Props) {
 		return () => {
 			mounted = false;
 		};
-	}, []);
+	}, [onChange, value]);
 
 	const themes = Object.keys(groups);
 

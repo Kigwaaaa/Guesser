@@ -41,7 +41,7 @@ export class FakeSupabase {
         const rows = this._apply();
         return Promise.resolve({ data: rows[0] ?? null, error: null });
       },
-      then(cb: Function) {
+      then(cb: (value: { data: any; error: null }) => { data: any; error: null } | PromiseLike<{ data: any; error: null }>) {
         const rows = this._apply();
         return Promise.resolve({ data: rows, error: null }).then(cb);
       },

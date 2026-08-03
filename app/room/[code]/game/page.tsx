@@ -15,11 +15,28 @@ type Player = {
   rank?: number | null;
 };
 
+type AssignmentInfo = {
+  player_id: string;
+  theme_items?: { id: string; name: string; image_url: string | null }[] | null;
+};
+
+type RoomStatusRow = {
+  current_turn_index?: number | null;
+  pending_guess_player_id?: string | null;
+  status?: string | null;
+};
+
+type RevealConfirmationRow = {
+  guesser_player_id: string;
+  confirming_player_id: string;
+};
+
 export default function GameScreen() {
   const params = useParams();
   const code = params?.code as string;
   const [players, setPlayers] = useState<Player[]>([]);
   const [assignments, setAssignments] = useState<Record<string, { name: string; image_url?: string | null }>>({});
+  const assignmentsRef = useRef(assignments);
   const [currentTurn, setCurrentTurn] = useState<number | null>(null);
   const [pendingGuesserId, setPendingGuesserId] = useState<string | null>(null);
   const [confirmations, setConfirmations] = useState<Record<string, string[]>>({});
@@ -28,6 +45,10 @@ export default function GameScreen() {
   // unmask animation trigger state
   const [unmask, setUnmask] = useState<null | { playerId: string; name?: string; image_url?: string | null; rank?: number | null; key: number }>(null);
   const unmaskKeyRef = useRef(0);
+
+  useEffect(() => {
+    assignmentsRef.current = assignments;
+  }, [assignments]);
 
   useEffect(() => {
     if (!code) return;
@@ -40,13 +61,18 @@ export default function GameScreen() {
         .eq("room_code", code)
         .order("turn_order_index", { ascending: true });
       if (plErr) return console.error(plErr);
-      if (mounted) setPlayers(pl as any);
+      if (mounted) setPlayers((pl ?? []) as Player[]);
 
-      const { data: asg, error: asgErr } = await supabase.from("player_assignments").select("player_id,theme_items(id,name,image_url)");
+      const { data: asg, error: asgErr } = await supabase
+        .from("player_assignments")
+        .select("player_id,theme_items(id,name,image_url)");
       if (asgErr) return console.error(asgErr);
       const map: Record<string, { name: string; image_url?: string | null }> = {};
-      (asg || []).forEach((r: any) => {
-        if (r.player_id && r.theme_items) map[r.player_id] = { name: r.theme_items.name, image_url: r.theme_items.image_url };
+      ((asg ?? []) as Array<AssignmentInfo & { theme_items?: { id: string; name: string; image_url: string | null }[] | null }>).forEach((r) => {
+        if (r.player_id && r.theme_items && r.theme_items.length > 0) {
+          const item = r.theme_items[0];
+          map[r.player_id] = { name: item.name, image_url: item.image_url };
+        }
       });
       if (mounted) setAssignments(map);
 
@@ -58,9 +84,12 @@ export default function GameScreen() {
         setRoomStatus(room?.status ?? null);
       }
 
-      const { data: revData } = await supabase.from("reveal_confirmations").select("guesser_player_id,confirming_player_id").eq("room_code", code);
+      const { data: revData } = await supabase
+        .from("reveal_confirmations")
+        .select("guesser_player_id,confirming_player_id")
+        .eq("room_code", code);
       const revMap: Record<string, string[]> = {};
-      (revData || []).forEach((r: any) => {
+      ((revData ?? []) as RevealConfirmationRow[]).forEach((r) => {
         revMap[r.guesser_player_id] = revMap[r.guesser_player_id] || [];
         revMap[r.guesser_player_id].push(r.confirming_player_id);
       });
@@ -70,17 +99,17 @@ export default function GameScreen() {
     load();
 
     // subscribe players
-    const plChannel = supabase
-      .channel(`game_players_${code}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` }, (payload) => {
-        const ev = payload.eventType;
-        const newRow = payload.new as Player | null;
-        const oldRow = payload.old as Player | null;
+    const plChannel = supabase.channel(`game_players_${code}`);
+    plChannel.on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` }, (payload: unknown) => {
+        const incoming = payload as { eventType: string; new: Player | null; old: Player | null };
+        const ev = incoming.eventType;
+        const newRow = incoming.new;
+        const oldRow = incoming.old;
 
         // detect elimination event (transition false -> true)
         if (ev === "UPDATE" && newRow && newRow.is_eliminated && (!oldRow || !oldRow.is_eliminated)) {
           // fetch assignment name/url if available
-          const a = assignments[newRow.id];
+          const a = assignmentsRef.current[newRow.id];
           unmaskKeyRef.current += 1;
           setUnmask({ playerId: newRow.id, name: a?.name, image_url: a?.image_url, rank: newRow.rank ?? null, key: unmaskKeyRef.current });
         }
@@ -102,12 +131,12 @@ export default function GameScreen() {
       .subscribe();
 
     // assignments subscription
-    const asgChannel = supabase
-      .channel(`game_assignments_${code}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "player_assignments" }, (payload) => {
-        const ev = payload.eventType;
-        const newRow = payload.new as any | null;
-        const oldRow = payload.old as any | null;
+    const asgChannel = supabase.channel(`game_assignments_${code}`);
+    asgChannel.on("postgres_changes", { event: "*", schema: "public", table: "player_assignments" }, (payload: unknown) => {
+        const incoming = payload as { eventType: string; new: { player_id: string; theme_item_id: string } | null; old: { player_id: string; theme_item_id: string } | null };
+        const ev = incoming.eventType;
+        const newRow = incoming.new;
+        const oldRow = incoming.old;
         setAssignments((prev) => {
           const next = { ...prev };
           if (ev === "INSERT" && newRow) {
@@ -127,10 +156,10 @@ export default function GameScreen() {
       .subscribe();
 
     // rooms subscription
-    const roomChannel = supabase
-      .channel(`game_room_${code}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `code=eq.${code}` }, (payload) => {
-        const newRow = payload.new as any | null;
+    const roomChannel = supabase.channel(`game_room_${code}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `code=eq.${code}` }, (payload: unknown) => {
+        const incoming = payload as { new: RoomStatusRow | null };
+        const newRow = incoming.new;
         if (newRow && typeof newRow.current_turn_index === "number") setCurrentTurn(newRow.current_turn_index);
         if (newRow) {
           setPendingGuesserId(newRow.pending_guess_player_id ?? null);
@@ -140,19 +169,18 @@ export default function GameScreen() {
       .subscribe();
 
     // reveal confirmations
-    const revChannel = supabase
-      .channel(`game_reveals_${code}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "reveal_confirmations", filter: `room_code=eq.${code}` },
-        (payload) => {
+    const revChannel = supabase.channel(`game_reveals_${code}`);
+    revChannel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "reveal_confirmations", filter: `room_code=eq.${code}` },
+      () => {
           supabase
             .from("reveal_confirmations")
             .select("guesser_player_id,confirming_player_id")
             .eq("room_code", code)
             .then(({ data }) => {
               const map: Record<string, string[]> = {};
-              (data || []).forEach((r: any) => {
+              ((data ?? []) as RevealConfirmationRow[]).forEach((r) => {
                 map[r.guesser_player_id] = map[r.guesser_player_id] || [];
                 map[r.guesser_player_id].push(r.confirming_player_id);
               });
@@ -168,7 +196,7 @@ export default function GameScreen() {
         asgChannel.unsubscribe();
         roomChannel.unsubscribe();
         revChannel.unsubscribe();
-      } catch (e) {
+      } catch {
         // ignore
       }
       mounted = false;
@@ -238,7 +266,7 @@ export default function GameScreen() {
                 {isSelf && currentTurn === p.turn_order_index && !pendingGuesserId ? (
                   <div className="mt-2">
                     <button className="btn btn-primary" onClick={onStartGuess}>
-                      I'm guessing now
+                      I&apos;m guessing now
                     </button>
                   </div>
                 ) : null}

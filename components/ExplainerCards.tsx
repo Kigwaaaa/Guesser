@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useRef, useState } from "react";
 
 // ExplainerCards
@@ -65,7 +67,7 @@ export default function ExplainerCards(): JSX.Element {
 		}
 	}
 
-	function onPointerUp(e: React.PointerEvent) {
+function onPointerUp() {
 		if (startX.current == null) return;
 		const dx = deltaX.current;
 		startX.current = null;

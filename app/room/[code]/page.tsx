@@ -34,41 +34,40 @@ export default function RoomLobby() {
         if (!mounted) return;
         setLoading(false);
         if (error) return console.error(error);
-        setPlayers(data as any);
+        setPlayers((data ?? []) as Player[]);
       });
 
     // subscribe to realtime changes for players in this room
-    const channel = supabase
-      .channel(`room_players_${code}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` },
-        (payload) => {
-          const ev = payload.eventType;
-          const newRow = payload.new as Player | null;
-          const oldRow = payload.old as Player | null;
+    const channel = supabase.channel(`room_players_${code}`);
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` },
+      (payload: unknown) => {
+        const incoming = payload as { eventType: string; new: Player | null; old: Player | null };
+        const ev = incoming.eventType;
+        const newRow = incoming.new;
+        const oldRow = incoming.old;
 
-          setPlayers((prev) => {
-            let next = [...prev];
-            if (ev === "INSERT" && newRow) {
-              next.push(newRow);
-              next.sort((a, b) => a.turn_order_index - b.turn_order_index);
-            } else if (ev === "UPDATE" && newRow) {
-              next = next.map((p) => (p.id === newRow.id ? newRow : p));
-            } else if (ev === "DELETE" && oldRow) {
-              next = next.filter((p) => p.id !== oldRow.id);
-            }
-            return next;
-          });
-        }
-      )
-      .subscribe();
+        setPlayers((prev) => {
+          let next = [...prev];
+          if (ev === "INSERT" && newRow) {
+            next.push(newRow);
+            next.sort((a, b) => a.turn_order_index - b.turn_order_index);
+          } else if (ev === "UPDATE" && newRow) {
+            next = next.map((p) => (p.id === newRow.id ? newRow : p));
+          } else if (ev === "DELETE" && oldRow) {
+            next = next.filter((p) => p.id !== oldRow.id);
+          }
+          return next;
+        });
+      }
+    ).subscribe();
 
     return () => {
       mounted = false;
       try {
         channel.unsubscribe();
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -76,6 +75,20 @@ export default function RoomLobby() {
 
   const hostId = (typeof window !== "undefined" && sessionStorage.getItem("player_id")) || null;
   const isHost = hostId && players.find((p) => p.turn_order_index === 0 && p.id === hostId);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+
+  async function copyCode() {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyStatus("Code copied!");
+      window.setTimeout(() => setCopyStatus(null), 2000);
+    } catch (error) {
+      console.error("Failed to copy room code", error);
+      setCopyStatus("Copy failed");
+      window.setTimeout(() => setCopyStatus(null), 2000);
+    }
+  }
 
   async function startGame() {
     if (!code) return;
@@ -88,7 +101,24 @@ export default function RoomLobby() {
   return (
     <main className="min-h-screen p-6 bg-background text-foreground">
       <div className="max-w-3xl mx-auto">
-        <h2 className="text-2xl font-semibold mb-4">Room {code}</h2>
+        <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-gray-400">Room code</p>
+              <h1 className="mt-2 text-5xl font-extrabold tracking-tight text-white">{code}</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={copyCode}
+                className="rounded-full bg-violet-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-violet-400"
+              >
+                Copy code
+              </button>
+              {copyStatus ? <span className="text-sm text-green-300">{copyStatus}</span> : null}
+            </div>
+          </div>
+        </div>
 
         <div className="mb-4">
           <h3 className="font-medium">Players</h3>
