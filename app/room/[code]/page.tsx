@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
+import { startGame as engineStartGame } from "../../../lib/gameEngine";
 
 type Player = {
   id: string;
@@ -14,10 +15,21 @@ type Player = {
 
 export default function RoomLobby() {
   const params = useParams();
+  const router = useRouter();
   const code = params?.code as string;
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [hostId, setHostId] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setHostId(sessionStorage.getItem("player_id"));
+    } catch {
+      setHostId(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!code) return;
@@ -43,6 +55,7 @@ export default function RoomLobby() {
       "postgres_changes",
       { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` },
       (payload: unknown) => {
+        console.log("[lobby] players postgres_changes", payload);
         const incoming = payload as { eventType: string; new: Player | null; old: Player | null };
         const ev = incoming.eventType;
         const newRow = incoming.new;
@@ -61,20 +74,39 @@ export default function RoomLobby() {
           return next;
         });
       }
-    ).subscribe();
+    ).subscribe((status) => {
+      console.log("[lobby] players channel status:", status);
+    });
+
+    const roomChannel = supabase.channel(`room_status_${code}`);
+    roomChannel
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rooms", filter: `code=eq.${code}` },
+        (payload: unknown) => {
+          console.log("[lobby] rooms postgres_changes", payload);
+          const incoming = payload as { new: { status?: string } | null };
+          if (incoming.new?.status === "playing") {
+            router.push(`/room/${code}/game`);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("[lobby] rooms channel status:", status);
+      });
 
     return () => {
       mounted = false;
       try {
         channel.unsubscribe();
+        roomChannel.unsubscribe();
       } catch {
         // ignore
       }
     };
-  }, [code]);
+  }, [code, router]);
 
-  const hostId = (typeof window !== "undefined" && sessionStorage.getItem("player_id")) || null;
-  const isHost = hostId && players.find((p) => p.turn_order_index === 0 && p.id === hostId);
+  const isHost = Boolean(hostId && players.some((p) => p.turn_order_index === 0 && p.id === hostId));
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   async function copyCode() {
@@ -91,11 +123,47 @@ export default function RoomLobby() {
   }
 
   async function startGame() {
-    if (!code) return;
+    console.log("[lobby] Start Game clicked", { code, hostId, isHost, playerCount: players.length });
+
+    if (!code) {
+      console.warn("[lobby] startGame aborted: missing room code");
+      return;
+    }
+
     setStarting(true);
-    const { error } = await supabase.from("rooms").update({ status: "playing" }).eq("code", code);
-    setStarting(false);
-    if (error) return console.error("Failed to start game", error);
+    setStartError(null);
+
+    try {
+      console.log("[lobby] calling engineStartGame (assignments + turn order)");
+      const engineResult = await engineStartGame(code);
+      console.log("[lobby] engineStartGame result:", engineResult);
+
+      if (!engineResult.success) {
+        setStartError(engineResult.message ?? "Failed to prepare game.");
+        return;
+      }
+
+      console.log("[lobby] updating rooms.status -> playing", { code });
+      const { data: roomData, error: roomError } = await supabase
+        .from("rooms")
+        .update({ status: "playing" })
+        .eq("code", code)
+        .select("code,status")
+        .maybeSingle();
+
+      console.log("[lobby] rooms.status update response:", { roomData, roomError });
+
+      if (roomError) {
+        console.error("[lobby] Failed to start game (rooms update):", roomError);
+        setStartError(roomError.message);
+        return;
+      }
+
+      console.log("[lobby] navigating to game screen", `/room/${code}/game`);
+      router.push(`/room/${code}/game`);
+    } finally {
+      setStarting(false);
+    }
   }
 
   return (
@@ -148,6 +216,7 @@ export default function RoomLobby() {
           </button>
           {!isHost && <div className="text-xs text-gray-400 mt-2">Only the host can start the game.</div>}
           {players.length < 2 && <div className="text-xs text-gray-400 mt-2">Need at least 2 players to start.</div>}
+          {startError && <div className="text-xs text-red-400 mt-2">{startError}</div>}
         </div>
       </div>
     </main>
