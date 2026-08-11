@@ -259,39 +259,55 @@ export default function GameScreen() {
     );
   }
 
-  return (
-    <main className="min-h-screen p-6 bg-background text-foreground">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-2xl font-semibold mb-4">Game — Room {code}</h2>
+  const playerCount = players.length;
+  const gridClass =
+    playerCount <= 1
+      ? "grid-cols-1 grid-rows-1"
+      : playerCount === 2
+        ? "grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
+        : playerCount === 3
+          ? "grid-cols-2 grid-rows-2 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1 sm:grid-cols-3 sm:grid-rows-1"
+          : "grid-cols-2 grid-rows-2";
 
-        <div className="grid grid-cols-2 gap-4">
+  return (
+    <main className="flex h-[100dvh] flex-col overflow-hidden bg-background p-3 text-foreground sm:p-4 md:p-6">
+      <div className="mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col">
+        <header className="mb-3 flex shrink-0 items-center justify-between gap-3 sm:mb-4">
+          <h2 className="text-lg font-semibold sm:text-2xl">Game — Room {code}</h2>
+          <span className="text-xs text-gray-400 sm:text-sm">{playerCount} players</span>
+        </header>
+
+        <div className={`grid min-h-0 flex-1 gap-3 sm:gap-4 ${gridClass}`}>
           {players.map((p) => {
             const isSelf = p.id === selfId;
             const isGuesser = pendingGuesserId === p.id;
+            const canGuess = isSelf && currentTurn === p.turn_order_index && !pendingGuesserId;
+
             return (
-              <div key={p.id} className="relative">
+              <div key={p.id} className="min-h-0">
                 <PlayerCard
                   player={p}
                   assignment={isSelf ? undefined : assignments[p.id] ?? null}
                   isSelf={isSelf}
                   isActiveTurn={currentTurn === p.turn_order_index}
                   isPendingGuesser={isGuesser}
+                  action={
+                    canGuess ? (
+                      <button
+                        type="button"
+                        className="rounded-lg bg-[#7C3AED] px-3 py-2 text-sm font-semibold text-black transition hover:bg-violet-400"
+                        onClick={onStartGuess}
+                      >
+                        I&apos;m guessing now
+                      </button>
+                    ) : null
+                  }
                 />
-
-                {/* Active player can start a guess when it's their turn and no pending guess exists */}
-                {isSelf && currentTurn === p.turn_order_index && !pendingGuesserId ? (
-                  <div className="mt-2">
-                    <button className="btn btn-primary" onClick={onStartGuess}>
-                      I&apos;m guessing now
-                    </button>
-                  </div>
-                ) : null}
               </div>
             );
           })}
         </div>
 
-        {/* Reveal confirmation UI shown once per client (for the current player) when someone else is guessing */}
         {pendingGuesserId && selfId && selfId !== pendingGuesserId ? (
           (() => {
             const selfPlayer = players.find((x) => x.id === selfId);
@@ -299,9 +315,14 @@ export default function GameScreen() {
             if (isElim) return null;
             const hasConfirmed = confirmations[pendingGuesserId]?.includes(selfId) ?? false;
             return (
-              <div className="mt-4">
-                <div className="mb-2">Player is guessing — confirm to reveal:</div>
-                <button className={`btn ${hasConfirmed ? "btn-disabled" : "btn-ghost"}`} onClick={() => onConfirmReveal(pendingGuesserId as string)} disabled={hasConfirmed}>
+              <div className="mt-3 shrink-0 rounded-xl border border-white/10 bg-white/5 p-3 sm:mt-4 sm:p-4">
+                <div className="mb-2 text-sm sm:text-base">Player is guessing — confirm to reveal:</div>
+                <button
+                  type="button"
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold ${hasConfirmed ? "bg-gray-800 text-gray-400" : "bg-[#7C3AED] text-black"}`}
+                  onClick={() => onConfirmReveal(pendingGuesserId as string)}
+                  disabled={hasConfirmed}
+                >
                   {hasConfirmed ? "Confirmed" : "Reveal"}
                 </button>
               </div>
@@ -309,7 +330,6 @@ export default function GameScreen() {
           })()
         ) : null}
 
-        {/* Unmask animation triggered globally when a player becomes eliminated */}
         {unmask ? (
           <UnmaskAnimation playerName={unmask.name ?? "Player"} imageUrl={unmask.image_url} rank={unmask.rank ?? null} onFinished={onUnmaskFinished} playKey={unmask.key} />
         ) : null}
