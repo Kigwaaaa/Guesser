@@ -7,6 +7,8 @@ import PlayerCard from "../../../../components/PlayerCard";
 import UnmaskAnimation from "../../../../components/UnmaskAnimation";
 import { startGuess as egStartGuess, confirmReveal as egConfirmReveal } from "../../../../lib/gameEngine";
 
+import { parseThemeItemEmbed, type ThemeItemSummary } from "../../../../lib/types";
+
 type Player = {
   id: string;
   name: string;
@@ -17,8 +19,14 @@ type Player = {
 
 type AssignmentInfo = {
   player_id: string;
-  theme_items?: { id: string; name: string; image_url: string | null }[] | null;
+  theme_items?: ThemeItemSummary | ThemeItemSummary[] | null;
 };
+
+function assignmentFromRow(row: AssignmentInfo): { name: string; image_url: string | null } | null {
+  const item = parseThemeItemEmbed(row.theme_items);
+  if (!row.player_id || !item?.name) return null;
+  return { name: item.name, image_url: item.image_url };
+}
 
 type RoomStatusRow = {
   current_turn_index?: number | null;
@@ -61,19 +69,27 @@ export default function GameScreen() {
         .eq("room_code", code)
         .order("turn_order_index", { ascending: true });
       if (plErr) return console.error(plErr);
-      if (mounted) setPlayers((pl ?? []) as Player[]);
+      const playerList = (pl ?? []) as Player[];
+      if (mounted) setPlayers(playerList);
 
-      const { data: asg, error: asgErr } = await supabase
-        .from("player_assignments")
-        .select("player_id,theme_items(id,name,image_url)");
-      if (asgErr) return console.error(asgErr);
-      const map: Record<string, { name: string; image_url?: string | null }> = {};
-      ((asg ?? []) as Array<AssignmentInfo & { theme_items?: { id: string; name: string; image_url: string | null }[] | null }>).forEach((r) => {
-        if (r.player_id && r.theme_items && r.theme_items.length > 0) {
-          const item = r.theme_items[0];
-          map[r.player_id] = { name: item.name, image_url: item.image_url };
+      const playerIds = playerList.map((p) => p.id);
+      const map: Record<string, { name: string; image_url: string | null }> = {};
+
+      if (playerIds.length > 0) {
+        const { data: asg, error: asgErr } = await supabase
+          .from("player_assignments")
+          .select("player_id,theme_items(id,name,image_url)")
+          .in("player_id", playerIds);
+        if (asgErr) {
+          console.error("[game] failed to load assignments", asgErr);
+        } else {
+          ((asg ?? []) as AssignmentInfo[]).forEach((r) => {
+            const parsed = assignmentFromRow(r);
+            if (parsed) map[r.player_id] = parsed;
+          });
         }
-      });
+      }
+
       if (mounted) setAssignments(map);
 
       const { data: room, error: roomErr } = await supabase.from("rooms").select("current_turn_index,pending_guess_player_id,status").eq("code", code).maybeSingle();

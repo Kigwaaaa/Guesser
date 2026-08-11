@@ -40,8 +40,10 @@ export default function PlayerCard({ player, assignment, isSelf = false, isActiv
             </svg>
           ) : assignment && assignment.image_url ? (
             <img src={assignment.image_url} alt={assignment.name} className="w-full h-full object-cover" />
+          ) : assignment ? (
+            <div className="text-xs text-gray-300 px-2 text-center leading-tight">{assignment.name}</div>
           ) : (
-            <div className="text-xs text-gray-400 px-2">No image</div>
+            <div className="text-xs text-gray-400 px-2">No assignment</div>
           )}
         </div>
 
