@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import { checkRoomActionRateLimit } from "../../lib/roomRateLimit";
 import ThemeSelector from "../../components/ThemeSelector";
 import PlayerCountSelector from "../../components/PlayerCountSelector";
 
@@ -25,62 +25,59 @@ export default function CreatePage() {
 		e?.preventDefault();
 		setError(null);
 		if (!name || !theme) return setError("Please enter your name and choose a theme.");
+
+		const clientId = typeof window !== "undefined"
+			? window.localStorage.getItem("guess-the-person:client-id") ?? "default"
+			: "default";
+		const rateLimit = checkRoomActionRateLimit("create-room", Date.now(), undefined, clientId);
+		if (!rateLimit.allowed) {
+			const seconds = Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000));
+			setLoading(false);
+			return setError(`Too many room creation attempts. Please wait ${seconds} seconds and try again.`);
+		}
+
 		setLoading(true);
 
-		// Try to create a unique room code, retrying on conflict a few times.
-		let code = generateCode(4);
-		for (let attempt = 0; attempt < 5; attempt++) {
-			const { error: roomErr } = await supabase.from("rooms").insert({
-				code,
-				theme,
-				target_player_count: count,
-				status: "waiting",
-			});
-
-			if (!roomErr) break; // success
-
-			// if conflict, generate a new code and retry
-			console.warn("create room error, retrying", roomErr);
-			code = generateCode(4);
-			if (attempt === 4) {
-				setLoading(false);
-				return setError("Failed to create a unique room code, try again.");
-			}
-		}
-
-		// insert host as player and capture the generated id
-		const { data: playerData, error: playerErr } = await supabase
-			.from("players")
-			.insert({ room_code: code, name, turn_order_index: 0 })
-			.select()
-			.maybeSingle();
-
-		setLoading(false);
-		if (playerErr || !playerData) return setError("Failed to add host to players: " + (playerErr?.message ?? "unknown"));
-
 		try {
-			// persist current player id for lobby identification (session-only)
-			sessionStorage.setItem("player_id", playerData.id);
-		} catch (e) {
-			// sessionStorage may be unavailable in some environments
-			console.warn("sessionStorage unavailable", e);
-		}
+			const response = await fetch("/api/rooms/create", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name, theme, count }),
+			});
+			const payload = await response.json().catch(() => ({}));
 
-		router.push(`/room/${code}`);
+			if (!response.ok) {
+				throw new Error(payload?.error ?? "Failed to create room.");
+			}
+
+			if (payload.playerId) {
+				try {
+					sessionStorage.setItem("player_id", payload.playerId);
+				} catch (error) {
+					console.warn("sessionStorage unavailable", error);
+				}
+			}
+
+			router.push(`/room/${payload.code}`);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to create room.");
+		} finally {
+			setLoading(false);
+		}
 	}
 
 	return (
-		<main className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
-			<div className="max-w-xl w-full">
-				<h2 className="text-2xl font-semibold mb-4">Create a room</h2>
+		<main className="masquerade-shell text-foreground">
+			<div className="max-w-xl w-full masquerade-panel rounded-[1.6rem] p-6 sm:p-8">
+				<h2 className="text-3xl font-semibold mb-5" style={{ fontFamily: "var(--font-display)" }}>Create a room</h2>
 
 				<form onSubmit={handleCreate} className="space-y-4">
 					<div>
-						<label className="block text-sm font-medium mb-1">Your name</label>
+						<label className="block text-sm font-medium mb-2 muted-copy">Your name</label>
 						<input
 							value={name}
 							onChange={(e) => setName(e.target.value)}
-							className="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700"
+							className="masquerade-input"
 							placeholder="e.g. Alex"
 						/>
 					</div>
@@ -89,13 +86,13 @@ export default function CreatePage() {
 
 					<PlayerCountSelector value={count} onChange={(n) => setCount(n)} />
 
-					{error && <div className="text-sm text-red-400">{error}</div>}
+					{error && <div className="text-sm text-[#F5EFE3] opacity-80">{error}</div>}
 
-					<div className="flex gap-2">
+					<div className="flex gap-2 pt-2">
 						<button
 							type="submit"
 							disabled={loading}
-							className="px-4 py-2 rounded-md bg-[#7C3AED] text-black"
+							className="gold-button"
 						>
 							{loading ? "Creating…" : "Create Room"}
 						</button>

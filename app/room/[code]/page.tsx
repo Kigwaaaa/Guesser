@@ -169,38 +169,38 @@ export default function RoomLobby() {
   return (
     <main className="min-h-screen p-6 bg-background text-foreground">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-gray-400">Room code</p>
-              <h1 className="mt-2 text-5xl font-extrabold tracking-tight text-white">{code}</h1>
+        <div className="mb-6 masquerade-panel rounded-[1.5rem] p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="wax-seal" aria-label={`Room code ${code}`}>
+                {code}
+              </div>
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] muted-copy">Room code</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={copyCode}
-                className="rounded-full bg-violet-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-violet-400"
-              >
+              <button type="button" onClick={copyCode} className="ivory-button">
                 Copy code
               </button>
-              {copyStatus ? <span className="text-sm text-green-300">{copyStatus}</span> : null}
+              {copyStatus ? <span className="text-sm text-[#F5EFE3] opacity-90">{copyStatus}</span> : null}
             </div>
           </div>
         </div>
 
-        <div className="mb-4">
-          <h3 className="font-medium">Players</h3>
-          {loading && <div className="text-sm text-gray-400">Loading players…</div>}
-          {!loading && players.length === 0 && <div className="text-sm text-gray-400">No players yet.</div>}
+        <div className="mb-5">
+          <h3 className="text-xl font-medium mb-3" style={{ fontFamily: "var(--font-display)" }}>Guest list</h3>
+          {loading && <div className="text-sm muted-copy">Loading players…</div>}
+          {!loading && players.length === 0 && <div className="text-sm muted-copy">No players yet.</div>}
 
-          <ul className="mt-2 space-y-2">
+          <ul className="guest-list mt-2">
             {players.map((p) => (
-              <li key={p.id} className="flex items-center justify-between p-3 bg-gray-900 rounded-md">
+              <li key={p.id} className="flex items-center justify-between py-3 px-2">
                 <div>
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-xs text-gray-400">Seat #{p.turn_order_index + 1}</div>
+                  <div className="font-medium text-lg">{p.name}</div>
+                  <div className="text-xs muted-copy">Seat #{p.turn_order_index + 1}</div>
                 </div>
-                <div className="text-sm text-gray-300">{p.is_eliminated ? "Eliminated" : "Active"}</div>
+                <div className="guest-tag">{p.is_eliminated ? "Eliminated" : "Active"}</div>
               </li>
             ))}
           </ul>
@@ -210,13 +210,13 @@ export default function RoomLobby() {
           <button
             disabled={!isHost || players.length < 2 || starting}
             onClick={startGame}
-            className={`px-4 py-2 rounded-md ${isHost ? "bg-[#7C3AED] text-black" : "bg-gray-800 text-gray-400"}`}
+            className={`gold-button ${!isHost || players.length < 2 ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             {starting ? "Starting…" : "Start Game"}
           </button>
-          {!isHost && <div className="text-xs text-gray-400 mt-2">Only the host can start the game.</div>}
-          {players.length < 2 && <div className="text-xs text-gray-400 mt-2">Need at least 2 players to start.</div>}
-          {startError && <div className="text-xs text-red-400 mt-2">{startError}</div>}
+          {!isHost && <div className="text-xs muted-copy mt-2">Only the host can start the game.</div>}
+          {players.length < 2 && <div className="text-xs muted-copy mt-2">Need at least 2 players to start.</div>}
+          {startError && <div className="text-xs text-[#F5EFE3] mt-2">{startError}</div>}
         </div>
       </div>
     </main>

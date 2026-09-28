@@ -17,7 +17,7 @@ export default function PlayerCountSelector({ value = 3, onChange }: Props) {
 					<button
 						key={n}
 						onClick={() => onChange && onChange(n)}
-						className={`px-3 py-2 rounded-md ${value === n ? "bg-[#7C3AED] text-black" : "bg-gray-800 text-gray-200"}`}
+						className={`px-3 py-2 rounded-full ${value === n ? "bg-[var(--color-accent)] text-[#18251f]" : "bg-[rgba(11,42,34,0.35)] text-[#F5EFE3] border border-[rgba(245,239,227,0.35)]"}`}
 					>
 						{n}
 					</button>

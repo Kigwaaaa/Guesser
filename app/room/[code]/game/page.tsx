@@ -245,12 +245,12 @@ export default function GameScreen() {
           <h2 className="text-3xl font-bold mb-4">Game Over — Final Rankings</h2>
           <ol className="space-y-3 text-left">
             {ranked.map((p) => (
-              <li key={p.id} className="p-3 rounded-lg bg-gray-900 flex items-center justify-between">
+              <li key={p.id} className="guest-list-item flex items-center justify-between py-3 px-2">
                 <div>
-                  <div className="font-semibold">{p.name}</div>
-                  <div className="text-sm text-gray-400">Seat #{p.turn_order_index + 1}</div>
+                  <div className="font-semibold" style={{ fontFamily: "var(--font-display)" }}>{p.name}</div>
+                  <div className="text-sm muted-copy">Seat #{p.turn_order_index + 1}</div>
                 </div>
-                <div className="text-2xl font-bold">#{p.rank}</div>
+                <div className="rank-badge">#{p.rank}</div>
               </li>
             ))}
           </ol>
@@ -273,8 +273,8 @@ export default function GameScreen() {
     <main className="flex h-[100dvh] flex-col overflow-hidden bg-background p-3 text-foreground sm:p-4 md:p-6">
       <div className="mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col">
         <header className="mb-3 flex shrink-0 items-center justify-between gap-3 sm:mb-4">
-          <h2 className="text-lg font-semibold sm:text-2xl">Game — Room {code}</h2>
-          <span className="text-xs text-gray-400 sm:text-sm">{playerCount} players</span>
+          <h2 className="text-lg font-semibold sm:text-2xl" style={{ fontFamily: "var(--font-display)" }}>Game — Room {code}</h2>
+          <span className="text-xs muted-copy sm:text-sm">{playerCount} players</span>
         </header>
 
         <div className={`grid min-h-0 flex-1 gap-3 sm:gap-4 ${gridClass}`}>
@@ -295,7 +295,7 @@ export default function GameScreen() {
                     canGuess ? (
                       <button
                         type="button"
-                        className="rounded-lg bg-[#7C3AED] px-3 py-2 text-sm font-semibold text-black transition hover:bg-violet-400"
+                        className="gold-button px-3 py-2 text-sm"
                         onClick={onStartGuess}
                       >
                         I&apos;m guessing now
@@ -315,11 +315,11 @@ export default function GameScreen() {
             if (isElim) return null;
             const hasConfirmed = confirmations[pendingGuesserId]?.includes(selfId) ?? false;
             return (
-              <div className="mt-3 shrink-0 rounded-xl border border-white/10 bg-white/5 p-3 sm:mt-4 sm:p-4">
+              <div className="mt-3 shrink-0 masquerade-panel p-3 sm:mt-4 sm:p-4">
                 <div className="mb-2 text-sm sm:text-base">Player is guessing — confirm to reveal:</div>
                 <button
                   type="button"
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold ${hasConfirmed ? "bg-gray-800 text-gray-400" : "bg-[#7C3AED] text-black"}`}
+                  className={`gold-button ${hasConfirmed ? "opacity-55 cursor-not-allowed" : ""}`}
                   onClick={() => onConfirmReveal(pendingGuesserId as string)}
                   disabled={hasConfirmed}
                 >

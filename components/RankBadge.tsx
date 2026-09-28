@@ -10,8 +10,8 @@ export default function RankBadge({ rank }: Props) {
       <div
         className="rank-badge"
         style={{
-          background: "linear-gradient(90deg,#7C3AED,#5B21B6)",
-          color: "white",
+          background: "linear-gradient(90deg, #6B1F2A, #3e1320)",
+          color: "#F5EFE3",
           padding: "6px 10px",
           borderRadius: 9999,
           fontWeight: 700,

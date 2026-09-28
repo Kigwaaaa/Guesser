@@ -11,7 +11,7 @@ export default function HelpButton(): JSX.Element {
     <button
       aria-label="Open help"
       onClick={openExplainer}
-      className="fixed right-6 bottom-6 w-12 h-12 rounded-full bg-[#7C3AED] text-black flex items-center justify-center shadow-lg"
+      className="fixed right-6 bottom-6 w-12 h-12 rounded-full bg-[var(--color-accent)] text-[#17231f] flex items-center justify-center border border-[rgba(245,239,227,0.2)]"
     >
       ?
     </button>

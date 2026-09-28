@@ -57,15 +57,15 @@ export default function ThemeSelector({ value, onChange }: Props) {
 
 	return (
 		<div>
-			<label className="block text-sm font-medium mb-2">Theme</label>
-			{loading && <div className="text-xs text-gray-400">Loading themes…</div>}
+			<label className="block text-sm font-medium mb-2 muted-copy">Theme</label>
+			{loading && <div className="text-xs muted-copy">Loading themes…</div>}
 			{!loading && themes.length === 0 && (
-				<div className="text-xs text-gray-400">No themes available yet.</div>
+				<div className="text-xs muted-copy">No themes available yet.</div>
 			)}
 
 			<div className="grid gap-2">
 				{themes.map((t) => (
-					<label key={t} className="flex items-center gap-3 p-2 border rounded-md cursor-pointer">
+					<label key={t} className="masquerade-option cursor-pointer">
 						<input
 							type="radio"
 							name="theme"
@@ -74,7 +74,7 @@ export default function ThemeSelector({ value, onChange }: Props) {
 						/>
 						<div className="flex-1">
 							<div className="font-medium">{t}</div>
-							<div className="text-xs text-gray-400">{groups[t].length} items</div>
+							<div className="text-xs muted-copy">{groups[t].length} items</div>
 						</div>
 					</label>
 				))}

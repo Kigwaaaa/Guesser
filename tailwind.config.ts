@@ -1,6 +1,5 @@
 import type { Config } from "tailwindcss";
 
-// Keep the game's spotlight accent available as a named utility across the UI.
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -10,9 +9,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#0F1224",
-        foreground: "#F5F3FF",
-        accent: "#7C3AED",
+        background: "#0B2A22",
+        foreground: "#F5EFE3",
+        accent: "#C9A227",
       },
     },
   },

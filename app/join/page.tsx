@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import { checkRoomActionRateLimit } from "../../lib/roomRateLimit";
 
 export default function JoinPage() {
 	const router = useRouter();
@@ -15,95 +15,77 @@ export default function JoinPage() {
 		e?.preventDefault();
 		setError(null);
 		if (!code || !name) return setError("Please enter both the room code and your name.");
+
+		const clientId = typeof window !== "undefined"
+			? window.localStorage.getItem("guess-the-person:client-id") ?? "default"
+			: "default";
+		const rateLimit = checkRoomActionRateLimit("join-room", Date.now(), undefined, clientId);
+		if (!rateLimit.allowed) {
+			const seconds = Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000));
+			setLoading(false);
+			return setError(`Too many join attempts. Please wait ${seconds} seconds and try again.`);
+		}
+
 		setLoading(true);
 
-		// Validate room exists and is joinable
-		const { data: room, error: roomErr } = await supabase
-			.from("rooms")
-			.select("code,target_player_count,status")
-			.eq("code", code)
-			.maybeSingle();
-
-		if (roomErr) {
-			setLoading(false);
-			return setError("Failed to check room: " + roomErr.message);
-		}
-		if (!room) {
-			setLoading(false);
-			return setError("Room not found.");
-		}
-		if (room.status !== "waiting") {
-			setLoading(false);
-			return setError("The game has already started or finished and cannot be joined.");
-		}
-
-		// Count current players
-		const { count, error: countErr } = await supabase
-			.from("players")
-			.select("id", { count: "exact", head: true })
-			.eq("room_code", code);
-
-		if (countErr) {
-			setLoading(false);
-			return setError("Failed to count players: " + countErr.message);
-		}
-
-		const current = count ?? 0;
-		if (current >= room.target_player_count) {
-			setLoading(false);
-			return setError("This room is already full.");
-		}
-
-		// Insert player with next turn index and capture id
-		const nextIndex = current; // zero-based
-		const { data: playerData, error: insErr } = await supabase
-			.from("players")
-			.insert({ room_code: code, name, turn_order_index: nextIndex })
-			.select()
-			.maybeSingle();
-
-		setLoading(false);
-		if (insErr || !playerData) return setError("Failed to join room: " + (insErr?.message ?? "unknown"));
-
 		try {
-			sessionStorage.setItem("player_id", playerData.id);
-		} catch (e) {
-			console.warn("sessionStorage unavailable", e);
-		}
+			const response = await fetch("/api/rooms/join", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ code, name }),
+			});
+			const payload = await response.json().catch(() => ({}));
 
-		router.push(`/room/${code}`);
+			if (!response.ok) {
+				throw new Error(payload?.error ?? "Failed to join room.");
+			}
+
+			if (payload.playerId) {
+				try {
+					sessionStorage.setItem("player_id", payload.playerId);
+				} catch (error) {
+					console.warn("sessionStorage unavailable", error);
+				}
+			}
+
+			router.push(`/room/${payload.code}`);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to join room.");
+		} finally {
+			setLoading(false);
+		}
 	}
 
 	return (
-		<main className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
-			<div className="max-w-md w-full">
-				<h2 className="text-2xl font-semibold mb-4">Join a room</h2>
+		<main className="masquerade-shell text-foreground">
+			<div className="max-w-md w-full masquerade-panel rounded-[1.6rem] p-6 sm:p-8">
+				<h2 className="text-3xl font-semibold mb-5" style={{ fontFamily: "var(--font-display)" }}>Join a room</h2>
 
 				<form onSubmit={handleJoin} className="space-y-4">
 					<div>
-						<label className="block text-sm font-medium mb-1">Room code</label>
+						<label className="block text-sm font-medium mb-2 muted-copy">Room code</label>
 						<input
 							value={code}
 							onChange={(e) => setCode(e.target.value.toUpperCase())}
-							className="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700"
+							className="masquerade-input"
 							placeholder="ABCD"
 						/>
 					</div>
 
 					<div>
-						<label className="block text-sm font-medium mb-1">Your name</label>
+						<label className="block text-sm font-medium mb-2 muted-copy">Your name</label>
 						<input
 							value={name}
 							onChange={(e) => setName(e.target.value)}
-							className="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700"
+							className="masquerade-input"
 							placeholder="e.g. Sam"
 						/>
 					</div>
 
-					{error && <div className="text-sm text-red-400">{error}</div>}
+					{error && <div className="text-sm text-[#F5EFE3] opacity-80">{error}</div>}
 
 					<div>
-						<button type="submit" disabled={loading} className="px-4 py-2 rounded-md bg-[#7C3AED] text-black">
+						<button type="submit" disabled={loading} className="ivory-button">
 							{loading ? "Joining…" : "Join Room"}
 						</button>
 					</div>

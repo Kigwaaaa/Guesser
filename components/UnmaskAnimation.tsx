@@ -32,38 +32,22 @@ export default function UnmaskAnimation({ playerName, imageUrl, rank, onFinished
     <div className="unmask-root fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
       <div className="relative w-72 h-44">
         <div
-          className={`card-flip w-full h-full rounded-lg shadow-2xl overflow-hidden bg-gray-900 border border-gray-800`} 
+          className={`mask-lift w-full h-full overflow-hidden ${phase === "reveal" || phase === "done" ? "is-revealed" : ""}`}
           style={{
-            transformStyle: "preserve-3d",
-            transition: "transform 320ms cubic-bezier(.2,.9,.2,1)",
-            transform: phase === "flip" ? "rotateY(180deg)" : "rotateY(0deg)",
+            transition: "transform 420ms cubic-bezier(.2,.9,.2,1), opacity 420ms ease",
+            transform: phase === "reveal" || phase === "done" ? "scale(1.02)" : "scale(1)",
           }}
         >
-          {/* Front face (silhouette) */}
-          <div className="absolute inset-0 flex items-center justify-center backface-hidden">
-            <div className="text-center text-gray-400">
-              <div className="w-32 h-24 bg-[#0F1224] rounded-md flex items-center justify-center">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="24" height="24" rx="6" fill="#0F1224" />
-                  <path d="M12 7a3 3 0 100 6 3 3 0 000-6z" fill="#1f2937" />
-                </svg>
-              </div>
-              <div className="mt-3 text-sm text-gray-400">Revealing...</div>
-            </div>
-          </div>
+          <div className="mask-panel" />
 
-          {/* Back face (identity) */}
-          <div
-            className="absolute inset-0 flex items-center justify-center backface-hidden"
-            style={{ transform: "rotateY(180deg)", backfaceVisibility: "hidden" }}
-          >
-            <div className="w-full h-full p-4 flex flex-col items-center justify-center bg-gradient-to-br from-[#0F1224] to-[#111827]">
-              <div className="w-32 h-24 rounded-md overflow-hidden shadow-inner bg-black">
-                {imageUrl ? <img src={imageUrl} alt={playerName} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-800" />}
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0B2A22]/90 p-4">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="w-32 h-24 overflow-hidden border border-[rgba(201,162,39,0.5)] bg-[#1B3A2E]">
+                {imageUrl ? <img src={imageUrl} alt={playerName} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-[#304c41]" />}
               </div>
-              <div className="mt-3 text-white font-semibold text-lg">{playerName}</div>
+              <div className="reveal-name mt-3">{playerName}</div>
               {phase === "reveal" || phase === "done" ? (
-                <div className="mt-4">
+                <div className="mt-3">
                   <div className={`rank-badge-container ${phase === "reveal" ? "play" : ""}`}>
                     {typeof rank === "number" ? <RankBadge rank={rank} /> : null}
                   </div>
@@ -75,9 +59,7 @@ export default function UnmaskAnimation({ playerName, imageUrl, rank, onFinished
       </div>
 
       <style>{`
-        .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-        .unmask-root { background: rgba(2,6,23,0.6); }
-        .card-flip { perspective: 1000px; }
+        .unmask-root { background: rgba(11,42,34,0.68); }
       `}</style>
     </div>
   );
