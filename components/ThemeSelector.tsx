@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { hasSupabaseConfig, supabase } from "../lib/supabaseClient";
 
 type ThemeItemRow = {
 	theme: string | null;
@@ -23,6 +23,11 @@ export default function ThemeSelector({ value, onChange }: Props) {
 
 	useEffect(() => {
 		let mounted = true;
+		if (!hasSupabaseConfig) {
+			setLoading(false);
+			setGroups({});
+			return;
+		}
 		setLoading(true);
 		// Fetch items and group by theme client-side for simplicity
 		supabase

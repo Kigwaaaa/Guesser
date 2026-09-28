@@ -6,13 +6,6 @@ import { checkRoomActionRateLimit } from "../../lib/roomRateLimit";
 import ThemeSelector from "../../components/ThemeSelector";
 import PlayerCountSelector from "../../components/PlayerCountSelector";
 
-function generateCode(length = 4) {
-	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	let s = "";
-	for (let i = 0; i < length; i++) s += chars[Math.floor(Math.random() * chars.length)];
-	return s;
-}
-
 export default function CreatePage() {
 	const router = useRouter();
 	const [name, setName] = useState("");

@@ -26,7 +26,7 @@ export default function UnmaskAnimation({ playerName, imageUrl, rank, onFinished
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, [playKey]);
+  }, [playKey, onFinished]);
 
   return (
     <div className="unmask-root fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
