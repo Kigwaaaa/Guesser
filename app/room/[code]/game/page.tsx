@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 import PlayerCard from "../../../../components/PlayerCard";
 import UnmaskAnimation from "../../../../components/UnmaskAnimation";
-import { startGuess as egStartGuess, confirmReveal as egConfirmReveal } from "../../../../lib/gameEngine";
+import ThemeSelector from "../../../../components/ThemeSelector";
+import { startGuess as egStartGuess, confirmReveal as egConfirmReveal, resetRoom as egResetRoom } from "../../../../lib/gameEngine";
 
 import { parseThemeItemEmbed, type ThemeItemSummary } from "../../../../lib/types";
 
@@ -32,6 +33,7 @@ type RoomStatusRow = {
   current_turn_index?: number | null;
   pending_guess_player_id?: string | null;
   status?: string | null;
+  theme?: string | null;
 };
 
 type RevealConfirmationRow = {
@@ -42,6 +44,7 @@ type RevealConfirmationRow = {
 export default function GameScreen() {
   const params = useParams();
   const code = params?.code as string;
+  const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [assignments, setAssignments] = useState<Record<string, { name: string; image_url?: string | null }>>({});
   const assignmentsRef = useRef(assignments);
@@ -49,6 +52,9 @@ export default function GameScreen() {
   const [pendingGuesserId, setPendingGuesserId] = useState<string | null>(null);
   const [confirmations, setConfirmations] = useState<Record<string, string[]>>({});
   const [roomStatus, setRoomStatus] = useState<string | null>(null);
+  const [roomTheme, setRoomTheme] = useState<string | null>(null);
+  const [nextTheme, setNextTheme] = useState<string | undefined>(undefined);
+  const [isResetting, setIsResetting] = useState(false);
 
   // unmask animation trigger state
   const [unmask, setUnmask] = useState<null | { playerId: string; name?: string; image_url?: string | null; rank?: number | null; key: number }>(null);
@@ -92,12 +98,14 @@ export default function GameScreen() {
 
       if (mounted) setAssignments(map);
 
-      const { data: room, error: roomErr } = await supabase.from("rooms").select("current_turn_index,pending_guess_player_id,status").eq("code", code).maybeSingle();
+      const { data: room, error: roomErr } = await supabase.from("rooms").select("current_turn_index,pending_guess_player_id,status,theme").eq("code", code).maybeSingle();
       if (roomErr) return console.error(roomErr);
       if (mounted) {
         setCurrentTurn(room?.current_turn_index ?? null);
         setPendingGuesserId(room?.pending_guess_player_id ?? null);
         setRoomStatus(room?.status ?? null);
+        setRoomTheme(room?.theme ?? null);
+        setNextTheme(room?.theme ?? undefined);
       }
 
       const { data: revData } = await supabase
@@ -179,7 +187,11 @@ export default function GameScreen() {
         if (newRow && typeof newRow.current_turn_index === "number") setCurrentTurn(newRow.current_turn_index);
         if (newRow) {
           setPendingGuesserId(newRow.pending_guess_player_id ?? null);
+          if (newRow.theme) setRoomTheme(newRow.theme);
           if (newRow.status) setRoomStatus(newRow.status);
+          if (newRow.status === "waiting") {
+            router.push(`/room/${code}`);
+          }
         }
       })
       .subscribe();
@@ -217,9 +229,10 @@ export default function GameScreen() {
       }
       mounted = false;
     };
-  }, [code]);
+  }, [code, router]);
 
   const selfId = typeof window !== "undefined" ? sessionStorage.getItem("player_id") : null;
+  const isHost = players[0]?.id === selfId;
 
   const onStartGuess = async () => {
     if (!code || !selfId) return;
@@ -231,6 +244,34 @@ export default function GameScreen() {
     if (!code || !selfId) return;
     const res = await egConfirmReveal(code, guesserId, selfId);
     if (!res.success) console.error(res.message);
+  };
+
+  const onRestartRound = async () => {
+    if (!code || !isHost) return;
+    setIsResetting(true);
+    try {
+      const result = await egResetRoom(code, undefined, nextTheme ?? roomTheme ?? undefined);
+      if (!result.success) {
+        console.error(result.message ?? "Failed to reset the round.");
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const onEndRoom = async () => {
+    if (!code || !isHost) return;
+    const { error } = await supabase
+      .from("rooms")
+      .update({ status: "waiting", current_turn_index: 0, pending_guess_player_id: null })
+      .eq("code", code);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    router.push(`/room/${code}`);
   };
 
   // handle animation finished
@@ -254,6 +295,26 @@ export default function GameScreen() {
               </li>
             ))}
           </ol>
+
+          {isHost ? (
+            <div className="mt-8 space-y-5 rounded-[1.5rem] border border-[#C9A76A]/30 bg-[#1A1B1F]/70 p-5 text-left">
+              <div>
+                <p className="mb-2 text-xs uppercase tracking-[0.25em] text-[#E7DACA] opacity-75">Next round</p>
+                <ThemeSelector value={nextTheme ?? roomTheme ?? undefined} onChange={setNextTheme} />
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button type="button" className="gold-button" onClick={onRestartRound} disabled={isResetting}>
+                  {isResetting ? "Resetting…" : "Play again"}
+                </button>
+                <button type="button" className="ivory-button" onClick={onEndRoom}>
+                  End room
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-8 text-sm muted-copy">The host can start the next round or end the room.</div>
+          )}
         </div>
       </main>
     );

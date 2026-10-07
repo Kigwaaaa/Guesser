@@ -20,6 +20,7 @@
  * the service role key) into any client-facing app code.
  */
 import { config } from "dotenv";
+config({ path: ".env.local" });
 config({ path: ".env" });
 
 import { createClient } from "@supabase/supabase-js";

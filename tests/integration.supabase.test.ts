@@ -7,9 +7,9 @@ describe('integration tests (fake supabase realtime)', () => {
     // simulate creation
     const code = 'Z123';
     db.tables.rooms.push({ code, theme: 'people', status: 'waiting', current_turn_index: 0 });
-    const room = db.tables.rooms.find((r:any)=>r.code===code);
+    const room = db.tables.rooms.find((r:any)=>r.code===code) as any;
     expect(room).toBeDefined();
-    expect(room.status).toBe('waiting');
+    expect(room!.status).toBe('waiting');
   });
 
   it('joining full/started/nonexistent room fails gracefully', async () => {
@@ -17,12 +17,14 @@ describe('integration tests (fake supabase realtime)', () => {
     db.tables.rooms.push({ code: 'FULL', status: 'waiting', target_player_count: 1 });
     db.tables.players.push({ id: 'u1', room_code: 'FULL' });
     // attempt second join should be considered full by application logic (we simulate failure)
-    const canJoin = db.tables.players.filter((p:any)=>p.room_code==='FULL').length < db.tables.rooms.find((r:any)=>r.code==='FULL').target_player_count;
+    const fullRoom = db.tables.rooms.find((r:any)=>r.code==='FULL') as any;
+    const canJoin = db.tables.players.filter((p:any)=>p.room_code==='FULL').length < (fullRoom?.target_player_count ?? 0);
     expect(canJoin).toBe(false);
 
     db.tables.rooms.push({ code: 'START', status: 'playing' });
-    const started = db.tables.rooms.find((r:any)=>r.code==='START');
-    expect(started.status).toBe('playing');
+    const started = db.tables.rooms.find((r:any)=>r.code==='START') as any;
+    expect(started).toBeDefined();
+    expect(started!.status).toBe('playing');
 
     const missing = db.tables.rooms.find((r:any)=>r.code==='NOPE');
     expect(missing).toBeUndefined();

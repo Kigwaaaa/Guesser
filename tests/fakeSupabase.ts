@@ -14,7 +14,6 @@ export class FakeSupabase {
     };
   }
 
-  // simple helper to clone rows
   clone(row: any) {
     return JSON.parse(JSON.stringify(row));
   }
@@ -24,9 +23,13 @@ export class FakeSupabase {
     const chain: any = {
       table,
       filters: {},
-      select(selectStr?: string) {
-        this._select = true;
+      error: null,
+      data: null,
+      count: null,
+      _order: null,
+      select(selectStr?: string, opts?: any) {
         this._selectStr = selectStr;
+        this._opts = opts;
         return this;
       },
       eq(field: string, val: any) {
@@ -41,58 +44,78 @@ export class FakeSupabase {
         const rows = this._apply();
         return Promise.resolve({ data: rows[0] ?? null, error: null });
       },
-      then(cb: (value: { data: any; error: null }) => { data: any; error: null } | PromiseLike<{ data: any; error: null }>) {
-        const rows = this._apply();
-        return Promise.resolve({ data: rows, error: null }).then(cb);
-      },
-      select_head_count() {
-        const rows = this._apply();
-        return Promise.resolve({ count: rows.length, error: null });
-      },
       delete() {
-        const rows = this._apply();
-        // remove matching rows
-        const before = self.tables[table].length;
-        self.tables[table] = self.tables[table].filter((r) => !this._matches(r));
-        this._notify(table, 'DELETE');
-        return Promise.resolve({ data: null, error: null });
+        this._op = 'delete';
+        return this;
       },
       insert(rows: any[]) {
-        rows.forEach((r: any) => {
+        const list = Array.isArray(rows) ? rows : [rows];
+        list.forEach((r: any) => {
           const clone = self.clone(r);
-          // simple primary key handling
           if (!clone.id) clone.id = Math.random().toString(36).slice(2, 10);
           self.tables[table].push(clone);
         });
+        this.data = list;
+        this.error = null;
         this._notify(table, 'INSERT');
-        return Promise.resolve({ data: rows, error: null });
+        return this;
       },
       update(obj: any) {
-        self.tables[table].forEach((r) => {
-          if (this._matches(r)) Object.assign(r, obj);
-        });
-        this._notify(table, 'UPDATE');
-        return Promise.resolve({ data: null, error: null });
+        this._op = 'update';
+        this._updateObj = obj;
+        return this;
       },
       upsert(rows: any[], opts?: any) {
-        rows.forEach((r: any) => {
-          // if primary key player_id
+        const list = Array.isArray(rows) ? rows : [rows];
+        list.forEach((r: any) => {
           const pk = r.player_id ?? r.id;
           const existing = self.tables[table].find((x) => (pk ? (x.player_id === pk || x.id === pk) : false));
           if (existing) Object.assign(existing, r);
           else self.tables[table].push(self.clone(r));
         });
+        this.data = list;
+        this.error = null;
         this._notify(table, 'UPSERT');
-        return Promise.resolve({ data: rows, error: null });
+        return Promise.resolve({ data: list, error: null });
       },
-      select_count(opts?: any) {
-        const rows = this._apply();
-        return Promise.resolve({ count: rows.length, error: null });
+      then(onFulfilled?: (value: any) => any, onRejected?: (reason: any) => any) {
+        let rows;
+        if (this._op === 'delete') {
+          rows = this._deleteMatches();
+        } else if (this._op === 'update') {
+          rows = this._updateMatches();
+        } else {
+          rows = this._apply();
+        }
+
+        const payload = {
+          data: rows,
+          error: this.error,
+          count: this._opts?.count === 'exact' ? rows.length : undefined,
+        };
+        return Promise.resolve(payload).then(onFulfilled, onRejected);
+      },
+      _deleteMatches() {
+        const before = self.tables[table] || [];
+        const removed = before.filter((r) => this._matches(r));
+        self.tables[table] = before.filter((r) => !this._matches(r));
+        this.data = removed;
+        this.error = null;
+        this._notify(table, 'DELETE');
+        return removed.map((r) => self.clone(r));
+      },
+      _updateMatches() {
+        const rows = (self.tables[table] || []).filter((r) => this._matches(r));
+        rows.forEach((r) => Object.assign(r, this._updateObj));
+        this.data = rows.map((r) => self.clone(r));
+        this.error = null;
+        this._notify(table, 'UPDATE');
+        return this.data;
       },
       _apply() {
         let rows = self.tables[table] || [];
         rows = rows.filter((r) => this._matches(r));
-        if (this._order) rows = [...rows].sort((a: any, b: any) => a[this._order.field] - b[this._order.field]);
+        if (this._order) rows = [...rows].sort((a: any, b: any) => Number(a[this._order.field] ?? 0) - Number(b[this._order.field] ?? 0));
         return rows.map((r) => self.clone(r));
       },
       _matches(row: any) {
@@ -103,6 +126,7 @@ export class FakeSupabase {
       },
       _notify(t: string, ev: string) { self._dispatch(t, ev); },
     };
+
     return chain;
   }
 

@@ -92,11 +92,32 @@ export async function startGuess(roomCode: string, playerId: string, client: any
 }
 
 /**
+ * Force an immediate reveal for the active guesser without waiting for the rest of the group.
+ */
+export async function revealGuess(roomCode: string, guesserPlayerId: string, client: any = supabase) {
+	if (!roomCode || !guesserPlayerId) return { success: false, message: "missing args" };
+
+	const { data: roomRow, error: roomErr } = await client
+		.from("rooms")
+		.select("pending_guess_player_id")
+		.eq("code", roomCode)
+		.maybeSingle();
+
+	if (roomErr) return { success: false, message: roomErr.message };
+	if (!roomRow || roomRow.pending_guess_player_id !== guesserPlayerId) {
+		return { success: false, message: "player is not the active guesser" };
+	}
+
+	return eliminatePlayer(roomCode, guesserPlayerId, client);
+}
+
+/**
  * Confirm reveal for a guess attempt: insert confirming player into reveal_confirmations
  * and check whether all non-eliminated, non-guesser players have confirmed. If so, eliminate.
  */
 export async function confirmReveal(roomCode: string, guesserPlayerId: string, confirmerPlayerId: string, client: any = supabase) {
 	if (!roomCode || !guesserPlayerId || !confirmerPlayerId) return { success: false, message: "missing args" };
+	if (confirmerPlayerId === guesserPlayerId) return revealGuess(roomCode, guesserPlayerId, client);
 
 	const { error: insErr } = await client.from("reveal_confirmations").insert({ room_code: roomCode, guesser_player_id: guesserPlayerId, confirming_player_id: confirmerPlayerId });
 	if (insErr) {
@@ -137,7 +158,7 @@ export async function confirmReveal(roomCode: string, guesserPlayerId: string, c
 	return { success: true };
 }
 
-async function eliminatePlayer(roomCode: string, playerId: string, client: any = supabase) {
+export async function eliminatePlayer(roomCode: string, playerId: string, client: any = supabase) {
 	// assign next rank: max existing rank + 1, or 1
 	const { data: ranks, error: rankErr } = await client.from("players").select("rank").eq("room_code", roomCode);
 	if (rankErr) return { success: false, message: rankErr.message };
@@ -153,6 +174,9 @@ async function eliminatePlayer(roomCode: string, playerId: string, client: any =
 
 	const { error: delErr } = await client.from("reveal_confirmations").delete().eq("room_code", roomCode).eq("guesser_player_id", playerId);
 	if (delErr) return { success: false, message: delErr.message };
+
+	const { error: delAllErr } = await client.from("reveal_confirmations").delete().eq("room_code", roomCode);
+	if (delAllErr) return { success: false, message: delAllErr.message };
 
 	// Advance to the next non-eliminated player (or finish the room)
 	const adv = await advanceTurn(roomCode, client);
@@ -181,7 +205,7 @@ export async function advanceTurn(roomCode: string, client: any = supabase) {
 
 	if (!activePlayers || activePlayers.length === 0) {
 		// no active players -> finish the room
-		const { error: finishErr } = await supabase.from("rooms").update({ status: "finished" }).eq("code", roomCode);
+		const { error: finishErr } = await client.from("rooms").update({ status: "finished", pending_guess_player_id: null }).eq("code", roomCode);
 		if (finishErr) return { success: false, message: finishErr.message };
 		return { success: true, finished: true } as any;
 	}
@@ -198,10 +222,44 @@ export async function advanceTurn(roomCode: string, client: any = supabase) {
 	const nextPos = pos >= 0 ? (pos + 1) % activePlayers.length : 0;
 	const nextTurnOrderIndex = activePlayers[nextPos].turn_order_index;
 
-	const { error: updErr } = await supabase.from("rooms").update({ current_turn_index: nextTurnOrderIndex }).eq("code", roomCode);
+	const { error: updErr } = await client.from("rooms").update({ current_turn_index: nextTurnOrderIndex }).eq("code", roomCode);
 	if (updErr) return { success: false, message: updErr.message };
 
 	return { success: true, newTurn: nextTurnOrderIndex } as any;
+}
+
+export async function resetRoom(roomCode: string, client: any = supabase, nextTheme?: string) {
+	if (!roomCode) return { success: false, message: "roomCode required" };
+
+	const { data: roomRow, error: roomLoadErr } = await client
+		.from("rooms")
+		.select("theme")
+		.eq("code", roomCode)
+		.maybeSingle();
+	if (roomLoadErr) return { success: false, message: roomLoadErr.message };
+	if (!roomRow) return { success: false, message: "room not found" };
+
+	const targetTheme = nextTheme ?? (roomRow as any).theme;
+
+	const { error: clearRevealsErr } = await client.from("reveal_confirmations").delete().eq("room_code", roomCode);
+	if (clearRevealsErr) return { success: false, message: clearRevealsErr.message };
+
+	const { error: clearPlayersErr } = await client
+		.from("players")
+		.update({ is_eliminated: false, rank: null })
+		.eq("room_code", roomCode);
+	if (clearPlayersErr) return { success: false, message: clearPlayersErr.message };
+
+	const { error: roomErr } = await client
+		.from("rooms")
+		.update({ theme: targetTheme, status: "playing", current_turn_index: 0, pending_guess_player_id: null })
+		.eq("code", roomCode);
+	if (roomErr) return { success: false, message: roomErr.message };
+
+	const start = await startGame(roomCode, client);
+	if (!start.success) return { success: false, message: start.message };
+
+	return { success: true };
 }
 
 /**
